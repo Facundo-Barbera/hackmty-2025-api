@@ -22,12 +22,19 @@ class ItemBatch(db.Model):
     expiry_date = db.Column(db.Date, nullable=False)
     received_date = db.Column(db.DateTime(timezone=True), nullable=False, default=datetime.utcnow)
     status = db.Column(Enum(BatchStatus), nullable=False, default=BatchStatus.available)
+
+    # Frontend support fields
+    qr_code = db.Column(db.String(100), unique=True, nullable=True, index=True)  # QR code for batch
+    lote_id = db.Column(db.String(50), nullable=True)  # Spanish field name support (alias for batch_number)
+    ean = db.Column(db.String(50), nullable=True, index=True)  # Link to product EAN
+
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime(timezone=True), nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relationships
     batch_trackings = db.relationship('DrawerBatchTracking', back_populates='batch', lazy='dynamic')
     restock_histories = db.relationship('RestockHistory', back_populates='batch', lazy='dynamic')
+    consumption_records = db.relationship('ConsumptionRecord', back_populates='batch', lazy='dynamic')
 
     def __repr__(self):
         return f'<ItemBatch {self.batch_number}>'
@@ -42,6 +49,9 @@ class ItemBatch(db.Model):
             'expiry_date': self.expiry_date.isoformat() if self.expiry_date else None,
             'received_date': self.received_date.isoformat() if self.received_date else None,
             'status': self.status.value if self.status else None,
+            'qr_code': self.qr_code,
+            'lote_id': self.lote_id,
+            'ean': self.ean,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }

@@ -1,11 +1,12 @@
 """
 Drawers API endpoints.
 """
-from flask import Blueprint, request
+from flask import Blueprint, request, Response
 from app import db
 from app.models import Drawer
 from app.utils.responses import success_response, error_response
 from app.utils.validators import validate_uuid, validate_required_fields, validate_positive_integer
+from app.utils.qr_codes import qr_png_data_uri, qr_png_bytes
 from datetime import datetime
 
 bp = Blueprint('drawers', __name__, url_prefix='/api/drawers')
@@ -270,4 +271,148 @@ def delete_drawer(drawer_id):
         return error_response('VALIDATION_ERROR', str(e), status_code=400)
     except Exception as e:
         db.session.rollback()
+        return error_response('SERVER_ERROR', str(e), status_code=500)
+
+
+@bp.route('/<drawer_id>/qr-code', methods=['POST'])
+def generate_drawer_qr(drawer_id):
+    """
+    Generate a QR code for a drawer.
+    ---
+    tags:
+      - Drawers
+    parameters:
+      - in: path
+        name: drawer_id
+        type: string
+        required: true
+        description: UUID of the drawer to link with the QR code
+    responses:
+      201:
+        description: QR code generated successfully
+      400:
+        description: Invalid UUID format
+      404:
+        description: Drawer not found
+      500:
+        description: Server error
+    """
+    try:
+        uuid_id = validate_uuid(drawer_id)
+        drawer = Drawer.query.get(uuid_id)
+
+        if not drawer:
+            return error_response('NOT_FOUND', f'Drawer {drawer_id} not found', status_code=404)
+
+        payload = str(drawer.id)
+        qr_data_uri = qr_png_data_uri(payload)
+
+        drawer.qr_code = payload
+        db.session.commit()
+
+        response_payload = {
+            'drawer_id': payload,
+            'qr_payload': payload,
+            'qr_code_image': qr_data_uri
+        }
+
+        return success_response(response_payload, status_code=201)
+
+    except ValueError as e:
+        db.session.rollback()
+        return error_response('VALIDATION_ERROR', str(e), status_code=400)
+    except Exception as e:
+        db.session.rollback()
+        return error_response('SERVER_ERROR', str(e), status_code=500)
+
+
+@bp.route('/<drawer_id>/qr-code', methods=['GET'])
+def get_drawer_qr(drawer_id):
+    """
+    Retrieve an existing drawer QR code.
+    ---
+    tags:
+      - Drawers
+    parameters:
+      - in: path
+        name: drawer_id
+        type: string
+        required: true
+        description: UUID of the drawer
+    responses:
+      200:
+        description: Existing QR code
+      400:
+        description: Invalid UUID format
+      404:
+        description: Drawer or QR code not found
+      500:
+        description: Server error
+    """
+    try:
+        uuid_id = validate_uuid(drawer_id)
+        drawer = Drawer.query.get(uuid_id)
+
+        if not drawer:
+            return error_response('NOT_FOUND', f'Drawer {drawer_id} not found', status_code=404)
+
+        if not drawer.qr_code:
+            return error_response('QR_CODE_NOT_GENERATED', f'Drawer {drawer_id} does not have a QR code yet', status_code=404)
+
+        payload = drawer.qr_code
+        qr_data_uri = qr_png_data_uri(payload)
+
+        response_payload = {
+            'drawer_id': str(drawer.id),
+            'qr_payload': payload,
+            'qr_code_image': qr_data_uri
+        }
+
+        return success_response(response_payload)
+
+    except ValueError as e:
+        return error_response('VALIDATION_ERROR', str(e), status_code=400)
+    except Exception as e:
+        return error_response('SERVER_ERROR', str(e), status_code=500)
+
+
+@bp.route('/<drawer_id>/qr-code/image', methods=['GET'])
+def get_drawer_qr_image(drawer_id):
+    """
+    Retrieve the QR code image (PNG) for a drawer.
+    ---
+    tags:
+      - Drawers
+    parameters:
+      - in: path
+        name: drawer_id
+        type: string
+        required: true
+        description: UUID of the drawer
+    responses:
+      200:
+        description: PNG image for the QR code
+      400:
+        description: Invalid UUID format
+      404:
+        description: Drawer or QR code not found
+      500:
+        description: Server error
+    """
+    try:
+        uuid_id = validate_uuid(drawer_id)
+        drawer = Drawer.query.get(uuid_id)
+
+        if not drawer:
+            return error_response('NOT_FOUND', f'Drawer {drawer_id} not found', status_code=404)
+
+        if not drawer.qr_code:
+            return error_response('QR_CODE_NOT_GENERATED', f'Drawer {drawer_id} does not have a QR code yet', status_code=404)
+
+        qr_bytes = qr_png_bytes(drawer.qr_code)
+        return Response(qr_bytes, mimetype='image/png')
+
+    except ValueError as e:
+        return error_response('VALIDATION_ERROR', str(e), status_code=400)
+    except Exception as e:
         return error_response('SERVER_ERROR', str(e), status_code=500)
